@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>155732133141-hjfvn9an5us068p8f4t0sk85sdlg2tl3.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.155732133141-hjfvn9an5us068p8f4t0sk85sdlg2tl3</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>155732133141-rnhlgb7sr1rap5o9m8h5ocan4jcqja7t.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyDY9ZCidtnZEQYJg16J75QbxcnuHFDL_1E</string>
+	<key>GCM_SENDER_ID</key>
+	<string>155732133141</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.example.pictora</string>
+	<key>PROJECT_ID</key>
+	<string>pictora-7f0ad</string>
+	<key>STORAGE_BUCKET</key>
+	<string>pictora-7f0ad.appspot.com</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:155732133141:ios:850ea9e0ce7a8ae16dd51c</string>
+</dict>
+</plist>

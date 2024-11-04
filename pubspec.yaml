@@ -1,0 +1,37 @@
+name: pictora
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  qr_flutter: ^4.0.0  # Add the QR code package
+  path_provider: ^2.0.2  # Add the path provider package
+  image_picker: ^0.8.7+4
+  permission_handler: ^10.2.0
+  firebase_auth: ^5.3.1
+  google_sign_in: ^6.2.1
+  firebase_storage: ^12.3.3
+  pretty_qr_code: ^3.0.0
+  firebase_database: ^11.0.5
+  mobile_scanner: ^5.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/splash_logo.jpg
+    - assets/hpbg1.png
