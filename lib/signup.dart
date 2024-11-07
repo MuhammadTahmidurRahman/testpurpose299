@@ -1,3 +1,4 @@
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
@@ -127,6 +128,7 @@ class _SignupPageState extends State<SignupPage> {
   }
 
   // Register user with Firebase (Email/Password)
+  // Register user with Firebase and save to Realtime Database
   Future<void> _registerUser() async {
     // Check if all fields are filled
     if (_nameController.text.trim().isEmpty ||
@@ -156,26 +158,46 @@ class _SignupPageState extends State<SignupPage> {
     }
 
     try {
-      UserCredential userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
+      // Create user with Firebase Authentication
+      UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
-      if (_image != null) {
-        await _uploadImageToFirebase(_image!);
-      }
+      User? user = userCredential.user;
+      if (user != null) {
+        // Reference to Realtime Database
+        DatabaseReference databaseRef = FirebaseDatabase.instance.reference().child('users').child(user.uid);
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => CreateOrJoinRoomPage()),
-      );
+        // Save user data to Realtime Database
+        await databaseRef.set({
+          'name': _nameController.text.trim(),
+          'email': user.email,
+          'photoURL': user.photoURL ?? '', // You can upload and set this if an image is available
+        });
+
+        // Optionally, upload an image and update photo URL
+        if (_image != null) {
+          String? imageUrl = await _uploadImageToFirebase(_image!);
+          if (imageUrl != null) {
+            await databaseRef.update({'photoURL': imageUrl});
+          }
+        }
+
+        // Navigate to the next page after successful signup
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => CreateOrJoinRoomPage()),
+        );
+      }
     } catch (e) {
       print("Registration failed: $e");
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Failed to register: ${e.toString()}")));
+        SnackBar(content: Text("Failed to register: ${e.toString()}")),
+      );
     }
   }
+
 
   // Sign in with Google and upload image
   Future<void> _signInWithGoogle() async {
@@ -433,4 +455,8 @@ class _SignupPageState extends State<SignupPage> {
       ),
     );
   }
+}
+
+extension on FirebaseDatabase {
+  reference() {}
 }
