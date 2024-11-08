@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "155732133141",
+    "firebase_url": "https://pictora-7f0ad-default-rtdb.asia-southeast1.firebasedatabase.app",
     "project_id": "pictora-7f0ad",
     "storage_bucket": "pictora-7f0ad.appspot.com"
   },
@@ -29,6 +30,13 @@
             {
               "client_id": "155732133141-ukbq0kqne0ni9p22bljvik945f2tv8bj.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "155732133141-hjfvn9an5us068p8f4t0sk85sdlg2tl3.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.pictora"
+              }
             }
           ]
         }
