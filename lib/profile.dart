@@ -27,7 +27,6 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
-  // Fetch user profile image from Firebase Realtime Database
   Future<void> _fetchUserProfile() async {
     if (user != null) {
       DatabaseReference userRef = _database.child('users').child(user!.uid);
@@ -43,7 +42,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // Update display name in Firebase Auth
   Future<void> _updateDisplayName(String newName) async {
     if (user != null) {
       await user!.updateDisplayName(newName);
@@ -52,14 +50,12 @@ class _ProfilePageState extends State<ProfilePage> {
         FirebaseAuth.instance.currentUser;
       });
 
-      // Update the name in Realtime Database as well
       await _database.child('users').child(user!.uid).update({
         'name': newName,
       });
     }
   }
 
-  // Show a dialog for editing the name
   void _showEditNameDialog() {
     showDialog(
       context: context,
@@ -91,6 +87,93 @@ class _ProfilePageState extends State<ProfilePage> {
       },
     );
   }
+
+  // Show a confirmation dialog before account deletion
+  void _showDeleteAccountDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Delete Account'),
+          content: Text('Are you sure you want to delete your account? This action cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _deleteAccount();
+              },
+              child: Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteAccount() async {
+    try {
+      if (user != null) {
+        String uid = user!.uid;
+
+        // Delete user profile image from Firebase Storage if it exists
+        if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) {
+          await FirebaseStorage.instance.refFromURL(_profileImageUrl!).delete();
+        }
+
+        // Delete user data from Realtime Database
+        await _database.child('users').child(uid).remove();
+
+        // Reference to the Firebase Storage
+        final storageRef = FirebaseStorage.instance.ref();
+
+        // Delete user's hosted rooms from the 'rooms' node and images within each room
+        final roomsRef = _database.child('rooms');
+        final snapshot = await roomsRef.get();
+
+        if (snapshot.exists) {
+          Map<dynamic, dynamic> roomsData = snapshot.value as Map<dynamic, dynamic>;
+
+          // Loop through each room and delete associated images and room data
+          for (var roomId in roomsData.keys) {
+            final room = roomsData[roomId];
+            if (room['hostId'] == uid) {
+
+              // Delete images in Firebase Storage for this room
+              final roomImagesRef = storageRef.child('rooms/$roomId');
+              final ListResult images = await roomImagesRef.listAll();
+
+              for (var item in images.items) {
+                await item.delete();  // Delete each image
+              }
+
+              // Delete room details in Realtime Database
+              await roomsRef.child(roomId).remove();
+            }
+          }
+        }
+
+        // Delete user from Firebase Authentication
+        await user!.delete();
+
+        // Navigate to the login page after successful account deletion
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => LoginPage()),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error deleting account: ${e.toString()}')),
+      );
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -133,6 +216,11 @@ class _ProfilePageState extends State<ProfilePage> {
               onTap: _showEditNameDialog,
             ),
             Divider(),
+            ListTile(
+              leading: Icon(Icons.delete_forever),
+              title: Text('Delete Account'),
+              onTap: _showDeleteAccountDialog,
+            ),
             SizedBox(height: 20),
             Center(
               child: ElevatedButton(
