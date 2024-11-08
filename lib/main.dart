@@ -20,6 +20,7 @@ void main() async {
   runApp(MyApp(database: database)); // Pass the database reference to your app
 }
 
+
 class MyApp extends StatelessWidget {
   final FirebaseDatabase database; // Use FirebaseDatabase type
 

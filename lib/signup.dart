@@ -1,4 +1,3 @@
-import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
@@ -6,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:firebase_database/firebase_database.dart'; // Import this package
 import 'createorjoinroom.dart';
 import 'login.dart';
 
@@ -23,6 +23,8 @@ class _SignupPageState extends State<SignupPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _isUploading = false;
+
+  final DatabaseReference _database = FirebaseDatabase.instance.ref();
 
   // Request permissions for camera or gallery
   Future<void> _requestPermission(Permission permission) async {
@@ -127,10 +129,8 @@ class _SignupPageState extends State<SignupPage> {
     }
   }
 
-  // Register user with Firebase (Email/Password)
-  // Register user with Firebase and save to Realtime Database
   Future<void> _registerUser() async {
-    // Check if all fields are filled
+    // Validation checks...
     if (_nameController.text.trim().isEmpty ||
         _emailController.text.trim().isEmpty ||
         _passwordController.text.trim().isEmpty ||
@@ -138,68 +138,56 @@ class _SignupPageState extends State<SignupPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Please fill up all the information box properly.")),
       );
-      return; // Exit the method if validation fails
+      return;
     }
 
-    // Check if passwords match
     if (_passwordController.text.trim() != _confirmPasswordController.text.trim()) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Passwords do not match")),
       );
-      return; // Exit the method if passwords do not match
+      return;
     }
 
-    // Check if password length is at least 6 characters
     if (_passwordController.text.trim().length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Password must be at least 6 characters long")),
       );
-      return; // Exit the method if password length is insufficient
+      return;
     }
 
     try {
-      // Create user with Firebase Authentication
-      UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
+      String? imageUrl;
+      if (_image != null) {
+        imageUrl = await _uploadImageToFirebase(_image!);
+      }
+
+      // Save user information to Realtime Database
       User? user = userCredential.user;
       if (user != null) {
-        // Reference to Realtime Database
-        DatabaseReference databaseRef = FirebaseDatabase.instance.reference().child('users').child(user.uid);
-
-        // Save user data to Realtime Database
-        await databaseRef.set({
+        _database.child('users').child(user.uid).set({
           'name': _nameController.text.trim(),
-          'email': user.email,
-          'photoURL': user.photoURL ?? '', // You can upload and set this if an image is available
+          'email': _emailController.text.trim(),
+          'photo': imageUrl ?? '', // Store the URL or leave it blank if no image
         });
-
-        // Optionally, upload an image and update photo URL
-        if (_image != null) {
-          String? imageUrl = await _uploadImageToFirebase(_image!);
-          if (imageUrl != null) {
-            await databaseRef.update({'photoURL': imageUrl});
-          }
-        }
-
-        // Navigate to the next page after successful signup
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => CreateOrJoinRoomPage()),
-        );
       }
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => CreateOrJoinRoomPage()),
+      );
     } catch (e) {
       print("Registration failed: $e");
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to register: ${e.toString()}")),
-      );
+          SnackBar(content: Text("Failed to register: ${e.toString()}")));
     }
   }
 
-
-  // Sign in with Google and upload image
   Future<void> _signInWithGoogle() async {
     if (_image == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -210,23 +198,24 @@ class _SignupPageState extends State<SignupPage> {
 
     try {
       final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-
       if (googleUser != null) {
         final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-
         final AuthCredential credential = GoogleAuthProvider.credential(
           accessToken: googleAuth.accessToken,
           idToken: googleAuth.idToken,
         );
 
-        UserCredential userCredential = await FirebaseAuth.instance
-            .signInWithCredential(credential);
-
-        // Upload the image after Google Sign-In
+        UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
         String? imageUrl = await _uploadImageToFirebase(_image!);
 
-        if (imageUrl != null) {
-          print("Image URL after Google Sign-In: $imageUrl");
+        // Save user information to Realtime Database
+        User? user = userCredential.user;
+        if (user != null) {
+          _database.child('users').child(user.uid).set({
+            'name': googleUser.displayName ?? 'N/A',
+            'email': googleUser.email,
+            'photo': imageUrl ?? '',
+          });
         }
 
         Navigator.push(
@@ -455,8 +444,4 @@ class _SignupPageState extends State<SignupPage> {
       ),
     );
   }
-}
-
-extension on FirebaseDatabase {
-  reference() {}
 }
