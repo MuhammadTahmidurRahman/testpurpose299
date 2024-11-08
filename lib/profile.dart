@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'login.dart'; // Import your login page for sign-out
+import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'login.dart';
 
 class ProfilePage extends StatefulWidget {
   @override
@@ -9,8 +10,16 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  final User? user = FirebaseAuth.instance.currentUser; // Get the current logged-in user
+  final User? user = FirebaseAuth.instance.currentUser;
+  final DatabaseReference _database = FirebaseDatabase.instance.ref();
+  String? _profileImageUrl;
   final TextEditingController _nameController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUserProfile();
+  }
 
   @override
   void dispose() {
@@ -18,19 +27,39 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
-  // Function to update the display name in Firebase
+  // Fetch user profile image from Firebase Realtime Database
+  Future<void> _fetchUserProfile() async {
+    if (user != null) {
+      DatabaseReference userRef = _database.child('users').child(user!.uid);
+      DataSnapshot snapshot = await userRef.get();
+
+      if (snapshot.exists) {
+        Map<dynamic, dynamic> userData = snapshot.value as Map<dynamic, dynamic>;
+        setState(() {
+          _profileImageUrl = userData['photo'] ?? '';
+          _nameController.text = userData['name'] ?? '';
+        });
+      }
+    }
+  }
+
+  // Update display name in Firebase Auth
   Future<void> _updateDisplayName(String newName) async {
     if (user != null) {
       await user!.updateDisplayName(newName);
       await user!.reload();
       setState(() {
-        // Refresh the user object with the updated information
         FirebaseAuth.instance.currentUser;
+      });
+
+      // Update the name in Realtime Database as well
+      await _database.child('users').child(user!.uid).update({
+        'name': newName,
       });
     }
   }
 
-  // Function to show a dialog for editing the name
+  // Show a dialog for editing the name
   void _showEditNameDialog() {
     showDialog(
       context: context,
@@ -68,7 +97,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Profile'),
-        backgroundColor: Colors.black, // Customize the app bar color
+        backgroundColor: Colors.black,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -78,15 +107,15 @@ class _ProfilePageState extends State<ProfilePage> {
             Center(
               child: CircleAvatar(
                 radius: 50,
-                backgroundImage: user?.photoURL != null
-                    ? NetworkImage(user!.photoURL!)
-                    : AssetImage('assets/default_profile.png') as ImageProvider,
+                backgroundImage: _profileImageUrl != null && _profileImageUrl!.isNotEmpty
+                    ? NetworkImage(_profileImageUrl!)
+                    : null,
               ),
             ),
             SizedBox(height: 20),
             Center(
               child: Text(
-                user?.displayName ?? 'Anonymous User',
+                user?.displayName ?? _nameController.text,
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
             ),
@@ -101,46 +130,18 @@ class _ProfilePageState extends State<ProfilePage> {
             ListTile(
               leading: Icon(Icons.edit),
               title: Text('Edit Profile'),
-              onTap: _showEditNameDialog, // Call the dialog function
-            ),
-            Divider(),
-            ListTile(
-              leading: Icon(Icons.support),
-              title: Text('Developer Support'),
-              onTap: () {
-                // Logic for contacting developer support (e.g., open an email or support page)
-                showDialog(
-                  context: context,
-                  builder: (context) {
-                    return AlertDialog(
-                      title: Text('Contact Developer Support'),
-                      content: Text('For assistance, please reach out at: support@yourapp.com'),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                          },
-                          child: Text('Close'),
-                        ),
-                      ],
-                    );
-                  },
-                );
-              },
+              onTap: _showEditNameDialog,
             ),
             Divider(),
             SizedBox(height: 20),
             Center(
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black, // Button background color
-                  foregroundColor: Colors.white, // Button text color
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
                 ),
                 onPressed: () async {
                   await FirebaseAuth.instance.signOut();
-                  await GoogleSignIn().signOut(); // Also sign out from Google if signed in via Google
-
-                  // Navigate back to the LoginPage after signing out
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(builder: (context) => LoginPage()),
