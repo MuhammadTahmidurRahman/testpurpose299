@@ -141,6 +141,13 @@ class _SignupPageState extends State<SignupPage> {
       return;
     }
 
+    if (_image == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Please upload your photo")),
+      );
+      return;
+    }
+
     if (_passwordController.text.trim() != _confirmPasswordController.text.trim()) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Passwords do not match")),
@@ -162,31 +169,41 @@ class _SignupPageState extends State<SignupPage> {
         password: _passwordController.text.trim(),
       );
 
-      String? imageUrl;
-      if (_image != null) {
-        imageUrl = await _uploadImageToFirebase(_image!);
-      }
+      String? imageUrl = await _uploadImageToFirebase(_image!);
 
       // Save user information to Realtime Database
       User? user = userCredential.user;
       if (user != null) {
-        _database.child('users').child(user.uid).set({
+        await _database.child('users').child(user.uid).set({
           'name': _nameController.text.trim(),
           'email': _emailController.text.trim(),
-          'photo': imageUrl ?? '', // Store the URL or leave it blank if no image
+          'photo': imageUrl ?? '',
         });
-      }
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => CreateOrJoinRoomPage()),
-      );
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => CreateOrJoinRoomPage()),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Email or Google account already exists. Please log in.")),
+        );
+      } else {
+        print("Registration failed: $e");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to register: ${e.message}")),
+        );
+      }
     } catch (e) {
       print("Registration failed: $e");
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Failed to register: ${e.toString()}")));
+        SnackBar(content: Text("Failed to register: ${e.toString()}")),
+      );
     }
   }
+
 
   Future<void> _signInWithGoogle() async {
     if (_image == null) {
@@ -206,16 +223,23 @@ class _SignupPageState extends State<SignupPage> {
         );
 
         UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
-        String? imageUrl = await _uploadImageToFirebase(_image!);
 
-        // Save user information to Realtime Database
-        User? user = userCredential.user;
-        if (user != null) {
-          _database.child('users').child(user.uid).set({
-            'name': googleUser.displayName ?? 'N/A',
-            'email': googleUser.email,
-            'photo': imageUrl ?? '',
-          });
+        if (userCredential.additionalUserInfo?.isNewUser ?? false) {
+          String? imageUrl = await _uploadImageToFirebase(_image!);
+
+          // Save user information to Realtime Database
+          User? user = userCredential.user;
+          if (user != null) {
+            await _database.child('users').child(user.uid).set({
+              'name': googleUser.displayName ?? 'N/A',
+              'email': googleUser.email,
+              'photo': imageUrl ?? '',
+            });
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Email or Google account already exists. Please log in.")),
+          );
         }
 
         Navigator.push(
@@ -227,12 +251,25 @@ class _SignupPageState extends State<SignupPage> {
           SnackBar(content: Text("No Google account found")),
         );
       }
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'account-exists-with-different-credential') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Email or Google account already exists. Please log in.")),
+        );
+      } else {
+        print("Google Sign-In failed: $e");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to sign in with Google: ${e.message}")),
+        );
+      }
     } catch (e) {
       print("Google Sign-In failed: $e");
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Failed to sign in with Google: ${e.toString()}")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to sign in with Google: ${e.toString()}")),
+      );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
