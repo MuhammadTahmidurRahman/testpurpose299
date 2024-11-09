@@ -5,7 +5,6 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'createorjoinroom.dart';
-import 'arrangedphoto.dart';
 
 class EventRoom extends StatelessWidget {
   final String eventCode;
@@ -52,23 +51,100 @@ class EventRoom extends StatelessWidget {
     );
   }
 
-  // Upload photos to Firebase Storage
   Future<void> _uploadPhoto(BuildContext context, String userId, String username) async {
     final picker = ImagePicker();
     final pickedFiles = await picker.pickMultiImage();
 
     if (pickedFiles != null) {
-      String folderName = "${username}_1";
+      final user = FirebaseAuth.instance.currentUser;
+      final roomSnapshot = await _databaseRef.child("rooms/$eventCode").get();
+
+      if (!roomSnapshot.exists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Room not found.')),
+        );
+        return;
+      }
+
+      final roomData = roomSnapshot.value as Map<dynamic, dynamic>? ?? {};
+
+      // Debugging: Log fetched room data
+      print('Fetched room data: $roomData');
+
+      bool isHost = false;
+      String folderType = '';
+      String userDataPath = '';
+      String displayName = '';
+
+      // Check if the current user is the host using composite key
+      if (roomData.containsKey('host')) {
+        for (var key in (roomData['host'] as Map<dynamic, dynamic>).keys) {
+          final hostData = roomData['host'][key];
+          if (hostData['hostId'] == userId) {
+            isHost = true;
+            folderType = "host";
+            userDataPath = 'rooms/$eventCode/host/$key';
+            displayName = hostData['hostName'] ?? 'Unknown Host';
+            break;
+          }
+        }
+      }
+
+      // Check if the user is a guest using composite key
+      if (!isHost && roomData.containsKey('guests')) {
+        for (var key in (roomData['guests'] as Map<dynamic, dynamic>).keys) {
+          final guestData = roomData['guests'][key];
+          if (guestData['guestId'] == userId) {
+            folderType = "guests";
+            userDataPath = 'rooms/$eventCode/guests/$key';
+            displayName = guestData['guestName'] ?? 'Unknown Guest';
+            break;
+          }
+        }
+      }
+
+      // Check if userId was found as either host or guest
+      if (folderType.isEmpty || userDataPath.isEmpty || displayName.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('User not found in room.')),
+        );
+        return;
+      }
+
+      // Debugging logs
+      print('Resolved folderType: $folderType');
+      print('Resolved userDataPath: $userDataPath');
+
+      // Upload photos to Firebase Storage
+      String storageFolderPath = 'rooms/$eventCode/$folderType/$displayName/$userId/photos/';
       for (var file in pickedFiles) {
         String fileName = DateTime.now().millisecondsSinceEpoch.toString();
         File convertedFile = File(file.path);
-        await _storage.ref('rooms/$eventCode/$folderName/$fileName').putFile(convertedFile);
+        String storagePath = '$storageFolderPath$fileName';
+
+        await _storage.ref(storagePath).putFile(convertedFile);
       }
+
+      // Update the `uploadedPhotoFolderPath` key for the matched user
+      await _databaseRef.child(userDataPath).update({
+        'uploadedPhotoFolderPath': storageFolderPath,
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${pickedFiles.length} photos uploaded successfully!')),
       );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No photos selected.')),
+      );
     }
   }
+
+
+
+
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -80,7 +156,6 @@ class EventRoom extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background image
           Image.asset('assets/hpbg1.png', fit: BoxFit.cover),
           FutureBuilder<DataSnapshot>(
             future: _databaseRef.child("rooms/$eventCode").get(),
@@ -91,11 +166,11 @@ class EventRoom extends StatelessWidget {
               final roomData = snapshot.data!.value as Map<dynamic, dynamic>? ?? {};
               final roomName = roomData['roomName'] ?? 'No Room Name';
 
-              // Host information
               final hostMap = roomData['host'] as Map<dynamic, dynamic>? ?? {};
               String hostName = 'Unknown Host';
               String? hostPhotoUrl;
               bool isHost = false;
+
               if (hostMap.isNotEmpty) {
                 for (var entry in hostMap.entries) {
                   final host = entry.value as Map<dynamic, dynamic>;
@@ -108,7 +183,6 @@ class EventRoom extends StatelessWidget {
                 }
               }
 
-              // Guests information
               final guestsData = roomData['guests'] as Map<dynamic, dynamic>? ?? {};
               List<Map<String, dynamic>> guestList = [];
               guestsData.forEach((key, value) {
@@ -121,7 +195,6 @@ class EventRoom extends StatelessWidget {
 
               return Column(
                 children: [
-                  // Custom header with back arrow and centered title
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 15.0, vertical: 20.0),
                     child: Row(
@@ -141,15 +214,11 @@ class EventRoom extends StatelessWidget {
                           child: Center(
                             child: Text(
                               'Event Room',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black,
-                              ),
+                              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black),
                             ),
                           ),
                         ),
-                        SizedBox(width: 40), // To balance the back button space
+                        SizedBox(width: 40),
                       ],
                     ),
                   ),
@@ -177,20 +246,10 @@ class EventRoom extends StatelessWidget {
                         ),
                         if (isHost)
                           ElevatedButton(
-                            onPressed: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => ArrangedPhotoPage(eventCode: eventCode)),
-                            ),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
-                            child: Text("Arrange Photo", style: TextStyle(color: Colors.white)),
-                          ),
-                        if (isHost)
-                          ElevatedButton(
                             onPressed: () => _showDeleteRoomDialog(context),
                             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                             child: Text("Delete Room"),
                           ),
-                        SizedBox(height: 20),
                         Text('Guests:', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
                         ...guestList.map((guest) => ListTile(
                           leading: guest['guestPhotoUrl'] != null
