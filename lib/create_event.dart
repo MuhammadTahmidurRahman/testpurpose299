@@ -55,13 +55,21 @@ class _CreateEventPageState extends State<CreateEventPage> {
   Future<void> _createRoomInFirebase(String roomName) async {
     final currentUser = FirebaseAuth.instance.currentUser;
     final uid = currentUser?.uid;
-    final name = currentUser?.displayName ?? 'Unknown';
-    final photoUrl = currentUser?.photoURL ?? '';
-    final email = currentUser?.email ?? 'unknown@example.com';
+
+    if (uid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("User not logged in!")));
+      return;
+    }
+
+    // Fetch user's current profile data from `users` node in Firebase
+    final userRef = _databaseRef.child("users/$uid");
+    final userSnapshot = await userRef.get();
+    final name = userSnapshot.child("name").value ?? 'Unknown';
+    final photoUrl = userSnapshot.child("photo").value ?? '';
+    final email = currentUser?.email?.replaceAll('.', '_') ?? 'unknown_example_com';
 
     // Generate a sanitized composite key
-    final sanitizedEmail = email.replaceAll('.', '_');
-    final compositeKey = '${_eventCode}_${roomName}_${sanitizedEmail}_${name}';
+    final hostCompositeKey = '${_eventCode}_${roomName}_${email}_${name}';
 
     // Reference to the room in Firebase (event room directly under eventCode)
     final roomRef = _databaseRef.child("rooms/$_eventCode");
@@ -75,29 +83,38 @@ class _CreateEventPageState extends State<CreateEventPage> {
 
     // Save the event room details under rooms/$eventCode
     await roomRef.set({
-      'eventCode': _eventCode, // Store event code here
-      'roomName': roomName,    // Room name
-    });
-
-    // Save the host's information under rooms/$eventCode/host/$compositeKey
-    await _databaseRef.child("rooms/$_eventCode/host/$compositeKey").set({
-      'hostId': uid,
-      'hostName': name,
-      'hostPhotoUrl': photoUrl,
-      'hostEmail': sanitizedEmail,
+      'eventCode': _eventCode,
       'roomName': roomName,
     });
 
-    // Listen for updates in the Firebase user profile and update the host's data if necessary
-    FirebaseAuth.instance.userChanges().listen((user) async {
-      if (user != null && user.uid == uid) {  // Only update if the current user is the host
-        final updatedName = user.displayName ?? name;
-        final updatedPhotoUrl = user.photoURL ?? photoUrl;
+    // Save the host's initial information under rooms/$eventCode/host
+    final hostRef = roomRef.child("host/$hostCompositeKey");
+    await hostRef.set({
+      'hostId': uid,
+      'hostName': name,
+      'hostPhotoUrl': photoUrl,
+      'hostEmail': email,
+    });
 
-        // Update host information under the composite key path
-        await _databaseRef.child("rooms/$_eventCode/host/$compositeKey").update({
+    // Listen for updates in the user's profile in the `users` node
+    userRef.onValue.listen((event) async {
+      final updatedName = event.snapshot.child("name").value ?? name;
+      final updatedPhotoUrl = event.snapshot.child("photo").value ?? photoUrl;
+
+      if (updatedName != name || updatedPhotoUrl != photoUrl) {
+        // Delete the old entry with the outdated composite key
+        await hostRef.remove();
+
+        // Create a new composite key with the updated host name
+        final newHostCompositeKey = '${_eventCode}_${roomName}_${email}_${updatedName}';
+        final newHostRef = roomRef.child("host/$newHostCompositeKey");
+
+        // Update host information with new data and composite key
+        await newHostRef.set({
+          'hostId': uid,
           'hostName': updatedName,
           'hostPhotoUrl': updatedPhotoUrl,
+          'hostEmail': email,
         });
       }
     });
