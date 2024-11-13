@@ -5,6 +5,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'createorjoinroom.dart';
+import 'arrangedphoto.dart';
 
 class EventRoom extends StatelessWidget {
   final String eventCode;
@@ -140,12 +141,6 @@ class EventRoom extends StatelessWidget {
     }
   }
 
-
-
-
-
-
-
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -244,6 +239,17 @@ class EventRoom extends StatelessWidget {
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
                           child: Text("Upload Photo", style: TextStyle(color: Colors.white)),
                         ),
+                        if (isHost)
+                          ElevatedButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => ArrangedPhotoPage(eventCode: eventCode)),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
+                            child: Text("Arrange Photos", style: TextStyle(color: Colors.white)),
+                          ),
                         if (isHost)
                           ElevatedButton(
                             onPressed: () => _showDeleteRoomDialog(context),
