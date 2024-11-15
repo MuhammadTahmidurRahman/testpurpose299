@@ -67,6 +67,7 @@ class _JoinEventPageState extends State<JoinEventPage> {
     });
   }
 
+
   Future<void> _joinRoomAsParticipant(String eventCode, String roomName) async {
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -120,6 +121,7 @@ class _JoinEventPageState extends State<JoinEventPage> {
 
     String sanitizedEmail = userEmail.replaceAll('.', '_');
 
+    // Updated participant data without 'uploadedPhotoFolderPath'
     final participantData = {
       'name': userName,
       'email': userEmail,
@@ -135,6 +137,7 @@ class _JoinEventPageState extends State<JoinEventPage> {
       ),
     );
   }
+
 
   Future<void> _navigateToEventRoom(String code) async {
     // Check if the entered code is empty
