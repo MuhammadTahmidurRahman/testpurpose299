@@ -26,10 +26,48 @@ class _JoinEventPageState extends State<JoinEventPage> {
       userName = user!.displayName ?? 'Guest';
       userEmail = user!.email ?? 'guest@example.com';
       userPhotoUrl = user!.photoURL ?? '';
+      _listenForUserProfileChanges();
     }
   }
 
-  Future<void> _joinRoomAsGuest(String eventCode, String roomName) async {
+  // Global listener for user profile changes
+  void _listenForUserProfileChanges() {
+    final userRef = _databaseRef.child("users/${user!.uid}");
+
+    userRef.onValue.listen((event) async {
+      // Get the updated name and photo URL
+      final updatedName = event.snapshot.child("name").value as String? ?? userName;
+      final updatedPhotoUrl = event.snapshot.child("photo").value as String? ?? userPhotoUrl;
+
+      // Check if there's any change
+      if (updatedName != userName || updatedPhotoUrl != userPhotoUrl) {
+        setState(() {
+          userName = updatedName;
+          userPhotoUrl = updatedPhotoUrl;
+        });
+
+        // Fetch all rooms
+        final roomsSnapshot = await _databaseRef.child('rooms').get();
+        for (var room in roomsSnapshot.children) {
+          final eventCode = room.key;
+
+          // Check if the user is a participant in the room
+          final participantRef = _databaseRef.child('rooms/$eventCode/participants/${user!.uid}');
+          final participantSnapshot = await participantRef.get();
+
+          if (participantSnapshot.exists) {
+            // Update the user's name and photo URL in the participants list of each room
+            await participantRef.update({
+              'name': userName,
+              'photoUrl': userPhotoUrl,
+            });
+          }
+        }
+      }
+    });
+  }
+
+  Future<void> _joinRoomAsParticipant(String eventCode, String roomName) async {
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Please log in to join the room!')),
@@ -37,83 +75,59 @@ class _JoinEventPageState extends State<JoinEventPage> {
       return;
     }
 
-    String sanitizedEmail = userEmail.replaceAll('.', '_');
+    final roomRef = _databaseRef.child('rooms/$eventCode');
+    final roomSnapshot = await roomRef.get();
 
-    // Fetch initial data from users/[userId]
-    final userRef = _databaseRef.child('users/${user!.uid}');
-    final userSnapshot = await userRef.get();
-
-    if (!userSnapshot.exists) {
+    if (!roomSnapshot.exists) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('User information not found!')),
+        SnackBar(content: Text('Room does not exist!')),
       );
       return;
     }
 
-    String guestName = userSnapshot.child('name').value as String? ?? 'Guest';
-    String guestPhotoUrl = userSnapshot.child('photo').value as String? ?? '';
+    final roomData = roomSnapshot.value as Map<dynamic, dynamic>;
 
-    // Set initial guest data
-    final guestData = {
-      'guestId': user!.uid,
-      'guestName': guestName,
-      'guestEmail': userEmail,
-      'guestPhotoUrl': guestPhotoUrl,
-    };
-
-    String compositeKey = '${eventCode}_${roomName}_${sanitizedEmail}_$guestName';
-    final guestRef = _databaseRef.child('rooms/$eventCode/guests/$compositeKey');
-    final guestSnapshot = await guestRef.get();
-
-    if (!guestSnapshot.exists) {
-      await guestRef.set(guestData);
-    } else {
+    if (roomData['hostId'] == user!.uid) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('You have already joined this room!')),
+        SnackBar(content: Text('You are the host of this room!')),
       );
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => EventRoom(eventCode: eventCode),
+        ),
+      );
+      return;
     }
 
-    // Set up a real-time listener for changes to users/[userId]
-    userRef.onValue.listen((event) async {
-      final updatedUserSnapshot = event.snapshot;
-      if (updatedUserSnapshot.exists) {
-        final updatedName = updatedUserSnapshot.child('name').value as String? ?? guestName;
-        final updatedPhotoUrl = updatedUserSnapshot.child('photo').value as String? ?? guestPhotoUrl;
+    final participantsRef = roomRef.child('participants/${user!.uid}');
+    final participantSnapshot = await participantsRef.get();
 
-        // Check if the name has changed
-        if (updatedName != guestName || updatedPhotoUrl != guestPhotoUrl) {
-          // Update guest information with the new name and photo
-          guestName = updatedName;
-          guestPhotoUrl = updatedPhotoUrl;
+    if (participantSnapshot.exists) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('You are already a participant in this room!')),
+      );
 
-          // Update guest information in the room
-          await guestRef.update({
-            'guestName': guestName,
-            'guestPhotoUrl': guestPhotoUrl,
-          });
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => EventRoom(eventCode: eventCode),
+        ),
+      );
+      return;
+    }
 
-          // If the guest name has changed, update the composite key
-          String newCompositeKey = '${eventCode}_${roomName}_${sanitizedEmail}_$guestName';
+    String sanitizedEmail = userEmail.replaceAll('.', '_');
 
-          if (newCompositeKey != compositeKey) {
-            // Remove the old entry and add a new entry with the updated composite key
-            await _databaseRef.child('rooms/$eventCode/guests/$compositeKey').remove();
+    final participantData = {
+      'name': userName,
+      'email': userEmail,
+      'photoUrl': userPhotoUrl,
+    };
 
-            await _databaseRef.child('rooms/$eventCode/guests/$newCompositeKey').set({
-              'guestId': user!.uid,
-              'guestName': guestName,
-              'guestEmail': userEmail,
-              'guestPhotoUrl': guestPhotoUrl,
-            });
+    await participantsRef.set(participantData);
 
-            // Update the composite key to the new one
-            compositeKey = newCompositeKey;
-          }
-        }
-      }
-    });
-
-    // Navigate to the Event Room page after joining
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
@@ -122,59 +136,26 @@ class _JoinEventPageState extends State<JoinEventPage> {
     );
   }
 
-
-  void _listenToUserChanges() {
-    FirebaseAuth.instance.userChanges().listen((updatedUser) async {
-      if (updatedUser != null && updatedUser.uid == user!.uid) {
-        final updatedName = updatedUser.displayName ?? userName;
-        final updatedPhotoUrl = updatedUser.photoURL ?? userPhotoUrl;
-
-        if (updatedName != userName || updatedPhotoUrl != userPhotoUrl) {
-          setState(() {
-            userName = updatedName;
-            userPhotoUrl = updatedPhotoUrl;
-          });
-
-          // Update guest entries in all rooms where this user has joined
-          _databaseRef.child('rooms').get().then((roomsSnapshot) {
-            if (roomsSnapshot.exists) {
-              final rooms = roomsSnapshot.value as Map<dynamic, dynamic>;
-
-              rooms.forEach((eventCode, roomData) {
-                final guests = roomData['guests'] as Map<dynamic, dynamic>?;
-
-                guests?.forEach((key, guest) async {
-                  if (guest['guestId'] == user!.uid) {
-                    // Create new composite key with the updated name
-                    String sanitizedEmail = userEmail.replaceAll('.', '_');
-                    final newCompositeKey = '${eventCode}_${roomData['roomName']}_${sanitizedEmail}_$updatedName';
-
-                    // Remove old guest entry and add new entry with updated composite key
-                    await _databaseRef.child('rooms/$eventCode/guests/$key').remove();
-                    await _databaseRef.child('rooms/$eventCode/guests/$newCompositeKey').set({
-                      'guestId': user!.uid,
-                      'guestName': updatedName,
-                      'guestEmail': userEmail,
-                      'guestPhotoUrl': updatedPhotoUrl,
-                    });
-                  }
-                });
-              });
-            }
-          });
-        }
-      }
-    });
-  }
-
   Future<void> _navigateToEventRoom(String code) async {
+    // Check if the entered code is empty
+    if (code.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please enter a room code!')),
+      );
+      return;
+    }
+
+    // Fetch the room data from Firebase
     final snapshot = await _databaseRef.child('rooms/$code').get();
 
     if (snapshot.exists) {
       final roomData = snapshot.value as Map<dynamic, dynamic>;
-      final roomName = roomData['roomName'] ?? 'No Room Name';
-      await _joinRoomAsGuest(code, roomName);
+      final roomName = roomData['roomName'] as String? ?? 'No Room Name';
+
+      // If room exists, proceed to join the room
+      await _joinRoomAsParticipant(code, roomName);
     } else {
+      // Show an error message if the room does not exist
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Room does not exist!')),
       );
@@ -265,10 +246,10 @@ class _JoinEventPageState extends State<JoinEventPage> {
                                                     final snapshot = await _databaseRef.child('rooms/$code').get();
                                                     if (snapshot.exists) {
                                                       final roomData = snapshot.value as Map<dynamic, dynamic>;
-                                                      final roomName = roomData['roomName'] ?? 'No Room Name';
+                                                      final roomName = roomData['roomName'] as String? ?? 'No Room Name';
 
                                                       Navigator.of(context).pop();
-                                                      await _joinRoomAsGuest(code, roomName);
+                                                      await _joinRoomAsParticipant(code, roomName);
                                                     } else {
                                                       ScaffoldMessenger.of(context).showSnackBar(
                                                         SnackBar(content: Text("The room doesn't exist!")),
