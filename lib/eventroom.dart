@@ -13,6 +13,8 @@ import 'arrangedphoto.dart';
 
 class EventRoom extends StatefulWidget {
   final String eventCode;
+  final DatabaseReference _databaseRef = FirebaseDatabase.instance.ref();
+  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   EventRoom({required this.eventCode});
 

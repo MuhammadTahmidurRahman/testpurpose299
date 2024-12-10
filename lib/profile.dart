@@ -43,6 +43,10 @@ class _ProfilePageState extends State<ProfilePage> {
           });
         }
       });
+
+      await _database.child('users').child(user!.uid).update({
+        'name': newName,
+      });
     }
   }
 
