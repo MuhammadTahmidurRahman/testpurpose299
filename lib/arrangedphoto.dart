@@ -720,4 +720,8 @@ class _ArrangedPhotoPageState extends State<ArrangedPhotoPage> {
       ),
     );
   }
+<<<<<<< Updated upstream
 }
+=======
+}
+>>>>>>> Stashed changes
