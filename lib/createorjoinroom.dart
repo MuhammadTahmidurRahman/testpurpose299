@@ -308,6 +308,7 @@ class _CreateOrJoinRoomPageState extends State<CreateOrJoinRoomPage> {
               onTap: () => _navigateToEventRoom(roomCode),
             ),
           ),
+          subtitle: Text('Hosted by: $hostName'),
         ),
       ),
     );
